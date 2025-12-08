@@ -52,19 +52,20 @@ export const supabase = (config.url && config.key)
 export const isUsingSupabase = !!supabase;
 
 // --- MOCK DATA FOR DEMO/OFFLINE MODE ---
-const MockAdmin: User = { id: 'demo-admin', username: 'admin', full_name: 'Admin Demo', role: UserRole.ADMIN, pin_code: '1234' };
-const MockCashier: User = { id: 'demo-cashier', username: 'kasir', full_name: 'Kasir Demo', role: UserRole.CASHIER, pin_code: '1111' };
+// Updated Mock IDs to be valid UUIDs to prevent confusion, though only used in offline mode.
+const MockAdmin: User = { id: '00000000-0000-0000-0000-000000000001', username: 'admin', full_name: 'Admin Demo', role: UserRole.ADMIN, pin_code: '1234' };
+const MockCashier: User = { id: '00000000-0000-0000-0000-000000000002', username: 'kasir', full_name: 'Kasir Demo', role: UserRole.CASHIER, pin_code: '1111' };
 
 const MockCustomers: Customer[] = [
-  { id: 'c1', name: 'Pelanggan Umum', type: CustomerType.GENERAL, phone: '-', debt: 0 },
-  { id: 'c2', name: 'Toko Sejahtera (Agen)', type: CustomerType.AGEN, phone: '08123456789', debt: 0 },
-  { id: 'c3', name: 'CV. Maju Jaya (Dist)', type: CustomerType.DISTRIBUTOR, phone: '08987654321', debt: 1500000 },
+  { id: '10000000-0000-0000-0000-000000000001', name: 'Pelanggan Umum', type: CustomerType.GENERAL, phone: '-', debt: 0 },
+  { id: '10000000-0000-0000-0000-000000000002', name: 'Toko Sejahtera (Agen)', type: CustomerType.AGEN, phone: '08123456789', debt: 0 },
+  { id: '10000000-0000-0000-0000-000000000003', name: 'CV. Maju Jaya (Dist)', type: CustomerType.DISTRIBUTOR, phone: '08987654321', debt: 1500000 },
 ];
 
 const MockProducts: Product[] = [
-  { id: 'p1', sku: '899123456', name: 'Kopi Susu Gula Aren', category: 'Minuman', stock: 50, cost_price: 5000, price_general: 12000, price_agen: 10000, price_distributor: 9000 },
-  { id: 'p2', sku: '899987654', name: 'Roti Bakar Coklat', category: 'Makanan', stock: 20, cost_price: 8000, price_general: 15000, price_agen: 13000, price_distributor: 12000 },
-  { id: 'p3', sku: '123456789', name: 'Air Mineral 600ml', category: 'Minuman', stock: 100, cost_price: 2000, price_general: 5000, price_agen: 4000, price_distributor: 3500 },
+  { id: '20000000-0000-0000-0000-000000000001', sku: '899123456', name: 'Kopi Susu Gula Aren', category: 'Minuman', stock: 50, cost_price: 5000, price_general: 12000, price_agen: 10000, price_distributor: 9000 },
+  { id: '20000000-0000-0000-0000-000000000002', sku: '899987654', name: 'Roti Bakar Coklat', category: 'Makanan', stock: 20, cost_price: 8000, price_general: 15000, price_agen: 13000, price_distributor: 12000 },
+  { id: '20000000-0000-0000-0000-000000000003', sku: '123456789', name: 'Air Mineral 600ml', category: 'Minuman', stock: 100, cost_price: 2000, price_general: 5000, price_agen: 4000, price_distributor: 3500 },
 ];
 
 export const DataService = {
@@ -107,7 +108,17 @@ export const DataService = {
   getProducts: async (): Promise<Product[]> => {
     if (!supabase) return MockProducts;
     const { data } = await supabase.from('products').select('*').order('name');
-    return (data && data.length > 0) ? (data as Product[]) : MockProducts;
+    
+    // Auto-Seed: If DB is empty, fill with default products so user doesn't get errors
+    if (!data || data.length === 0) {
+        console.log("Seeding Products...");
+        // Remove ID so DB generates UUIDs
+        const seedData = MockProducts.map(({ id, ...rest }) => rest);
+        const { data: newData } = await supabase.from('products').insert(seedData).select();
+        return (newData as Product[]) || [];
+    }
+    
+    return data as Product[];
   },
 
   saveProduct: async (product: Product): Promise<void> => {
@@ -126,7 +137,16 @@ export const DataService = {
   getCustomers: async (): Promise<Customer[]> => {
     if (!supabase) return MockCustomers;
     const { data } = await supabase.from('customers').select('*').order('name');
-    return (data && data.length > 0) ? (data as Customer[]) : MockCustomers;
+    
+    // Auto-Seed: If DB is empty, create 'Pelanggan Umum' with valid UUID
+    if (!data || data.length === 0) {
+        console.log("Seeding Customers...");
+        const defaultCust = { name: 'Pelanggan Umum', type: CustomerType.GENERAL, phone: '-', debt: 0 };
+        const { data: newData } = await supabase.from('customers').insert([defaultCust]).select();
+        return (newData as Customer[]) || [];
+    }
+
+    return data as Customer[];
   },
 
   saveCustomer: async (customer: Customer): Promise<void> => {
@@ -194,7 +214,7 @@ export const DataService = {
       change: transaction.change
     }]).select().single();
 
-    if (txError || !txData) throw new Error("Gagal: " + txError?.message);
+    if (txError || !txData) throw new Error("Gagal: " + (txError?.message || 'Unknown error'));
 
     const transactionId = txData.id;
     const itemsPayload = transaction.items.map(item => ({
