@@ -9,14 +9,47 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
       body { font-family: 'Inter', sans-serif; }
-      /* Print Styles for 58mm Thermal Printer */
+      
+      /* Print Styles for Thermal Printer */
       @media print {
-        @page { margin: 0; size: 58mm auto; }
+        @page { margin: 0; size: auto; }
         body { margin: 0; padding: 0; background: white; }
-        .no-print { display: none !important; }
-        .print-only { display: block !important; width: 100%; }
+        
+        /* Hide everything by default */
+        body * {
+          visibility: hidden;
+          height: 0;
+          overflow: hidden;
+        }
+        
+        /* Only show print-only elements */
+        .print-only, .print-only * {
+          visibility: visible;
+          height: auto;
+          overflow: visible;
+        }
+        
+        .print-only {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          display: flex;
+          justify-content: center; /* Center the receipt on page */
+        }
+
+        .receipt-container {
+             width: 100%; 
+             max-width: 100%;
+        }
       }
+      
       .print-only { display: none; }
+      
+      /* Receipt Font Style */
+      .font-receipt {
+        font-family: 'Courier New', Courier, monospace;
+      }
       
       /* Hide scrollbar for clean UI */
       .no-scrollbar::-webkit-scrollbar {
@@ -39,7 +72,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body class="bg-slate-50 text-slate-900 antialiased overflow-hidden">
     <div id="root" class="h-full"></div>

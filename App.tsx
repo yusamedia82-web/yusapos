@@ -444,7 +444,9 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
           </select>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-24 md:pb-0">
+        {/* Product List */}
+        {/* pb-36 for mobile to ensure last items are visible above the floating cart button */}
+        <div className="flex-1 overflow-y-auto pb-36 md:pb-0 no-scrollbar">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start">
             {filteredProducts.map(p => (
               <div key={p.id} onClick={() => addToCart(p)} className="bg-white p-3 rounded-lg shadow cursor-pointer active:scale-95 transition relative">
@@ -464,7 +466,8 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
         </div>
 
         {/* Mobile Bottom Bar for Cart (FIXED POSITION) */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex items-center justify-between z-50" onClick={() => setShowMobileCart(true)}>
+        {/* Added z-30 to ensure it floats above product list */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex items-center justify-between z-30" onClick={() => setShowMobileCart(true)}>
              <div className="flex items-center gap-3">
                <div className="bg-indigo-600 text-white p-2 rounded-full relative">
                  <Icons.Cart />
@@ -479,9 +482,11 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
         </div>
       </div>
 
-      {/* Cart Area */}
-      <div className={`fixed inset-0 z-40 bg-black/50 transition-opacity md:static md:bg-transparent md:w-96 md:flex md:flex-col md:border-l md:shadow-xl md:z-auto ${showMobileCart ? 'opacity-100' : 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto'}`}>
-         <div className={`absolute bottom-0 left-0 right-0 top-20 bg-white rounded-t-xl shadow-2xl flex flex-col md:static md:h-full md:rounded-none transition-transform duration-300 ${showMobileCart ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}`}>
+      {/* Cart Area / Modal */}
+      {/* Changed mobile layout to be a bottom sheet style with proper z-index and height */}
+      <div className={`fixed inset-0 z-50 bg-black/50 transition-opacity md:static md:bg-transparent md:w-96 md:flex md:flex-col md:border-l md:shadow-xl md:z-auto ${showMobileCart ? 'opacity-100' : 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto'}`}>
+         {/* Mobile: h-[85vh] absolute bottom to act as a bottom sheet. Desktop: static h-full */}
+         <div className={`absolute bottom-0 left-0 right-0 h-[85vh] bg-white rounded-t-xl shadow-2xl flex flex-col md:static md:h-full md:rounded-none transition-transform duration-300 ${showMobileCart ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}`}>
             <div className="p-4 bg-indigo-700 text-white flex justify-between items-center rounded-t-xl md:rounded-none shrink-0">
               <div>
                 <h2 className="text-xl font-bold">Keranjang</h2>
@@ -508,7 +513,8 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
               ))}
             </div>
 
-            <div className="p-4 bg-white border-t shrink-0">
+            {/* Added pb-8 for mobile to prevent button being too close to bottom edge */}
+            <div className="p-4 bg-white border-t shrink-0 pb-8 md:pb-4">
               <div className="flex justify-between text-lg font-bold mb-4 text-slate-800">
                 <span>Total:</span>
                 <span>{formatRupiah(grandTotal)}</span>
@@ -530,8 +536,8 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
 
       {/* Payment Modal */}
       {paymentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl animate-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl animate-in zoom-in duration-200 my-auto">
             <h3 className="text-xl font-bold mb-4">Pembayaran</h3>
             <div className="mb-4 p-4 bg-slate-50 rounded-lg text-center border border-slate-100">
               <label className="block text-xs uppercase text-slate-500 mb-1 tracking-wider">Total Tagihan</label>
@@ -598,38 +604,79 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
         </div>
       )}
 
-      {/* Hidden Print Receipt */}
-      <div className="print-only">
+      {/* Hidden Print Receipt for Thermal Printer */}
+      <div className="print-only flex justify-center p-0 m-0">
         {lastTransaction && (
-          <div className="p-2 text-xs font-mono" style={{ width: settings.printer_width }}>
-             <div className="text-center font-bold mb-1 text-sm">{settings.name}</div>
-             <div className="text-center mb-1">{settings.address}</div>
-             <div className="text-center mb-2">{settings.phone}</div>
-             <div className="border-b border-dashed border-black mb-2"></div>
-             <div>No: {lastTransaction.invoice_number}</div>
-             <div>Tgl: {formatDate(lastTransaction.date)}</div>
-             <div>Kasir: {lastTransaction.cashier_name}</div>
-             <div className="border-b border-dashed border-black my-2"></div>
-             {lastTransaction.items.map(item => (
-               <div key={item.id} className="flex justify-between mb-1">
-                 <div>{item.name}<br/>{item.qty} x {formatRupiah(item.selected_price)}</div>
-                 <div className="text-right">{formatRupiah(item.subtotal)}</div>
+          <div className="receipt-container p-2 font-receipt text-black" style={{ width: settings.printer_width }}>
+             {/* Header */}
+             <div className="text-center mb-2 leading-tight">
+               <h2 className="font-bold text-lg uppercase mb-1">{settings.name}</h2>
+               <p className="text-[10px] break-words px-2">{settings.address}</p>
+               <p className="text-[10px] mt-0.5">{settings.phone}</p>
+             </div>
+
+             {/* Separator */}
+             <div className="border-b-2 border-dashed border-black my-1"></div>
+
+             {/* Meta Info */}
+             <div className="text-[10px] leading-tight mb-2">
+               <div className="flex justify-between">
+                 <span>{formatDate(lastTransaction.date)}</span>
                </div>
-             ))}
+               <div className="flex justify-between mt-0.5">
+                 <span>Inv: {lastTransaction.invoice_number}</span>
+               </div>
+               <div className="flex justify-between mt-0.5">
+                 <span>Ksr: {lastTransaction.cashier_name}</span>
+               </div>
+               {lastTransaction.customer_name !== 'Umum' && (
+                 <div className="flex justify-between mt-0.5 border-t border-dashed border-black pt-0.5">
+                    <span>Plg: {lastTransaction.customer_name}</span>
+                 </div>
+               )}
+             </div>
+
+             <div className="border-b border-dashed border-black my-1"></div>
+
+             {/* Items List */}
+             <div className="text-[11px] leading-snug">
+               {lastTransaction.items.map((item, idx) => (
+                 <div key={idx} className="mb-1.5">
+                   <div className="font-bold truncate">{item.name}</div>
+                   <div className="flex justify-between">
+                     <span>{item.qty} x {formatRupiah(item.selected_price)}</span>
+                     <span className="font-medium">{formatRupiah(item.subtotal)}</span>
+                   </div>
+                 </div>
+               ))}
+             </div>
+
              <div className="border-b border-dashed border-black my-2"></div>
-             <div className="flex justify-between font-bold">
-               <span>Total</span>
-               <span>{formatRupiah(lastTransaction.total_amount)}</span>
+
+             {/* Totals & Calculations */}
+             <div className="text-[11px] font-bold leading-snug">
+               <div className="flex justify-between mb-1">
+                 <span>Total</span>
+                 <span className="text-sm">{formatRupiah(lastTransaction.total_amount)}</span>
+               </div>
+               <div className="flex justify-between mb-1">
+                 <span>Bayar ({lastTransaction.payment_method === 'debt' ? 'Hutang' : 'Tunai'})</span>
+                 <span>{formatRupiah(lastTransaction.amount_paid)}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span>{lastTransaction.change >= 0 ? 'Kembali' : 'Sisa Hutang'}</span>
+                 <span>{formatRupiah(Math.abs(lastTransaction.change || (lastTransaction.total_amount - lastTransaction.amount_paid)))}</span>
+               </div>
              </div>
-             <div className="flex justify-between">
-               <span>Bayar</span>
-               <span>{formatRupiah(lastTransaction.amount_paid)}</span>
+
+             <div className="border-b-2 border-dashed border-black my-2"></div>
+
+             {/* Footer */}
+             <div className="text-center text-[10px] leading-tight mt-2">
+               <p className="italic">{settings.footer_message}</p>
+               <p className="mt-2 font-bold">*** TERIMA KASIH ***</p>
+               <p className="mt-1 text-[9px]">Powered by YusaPos</p>
              </div>
-             <div className="flex justify-between">
-               <span>{lastTransaction.amount_paid < lastTransaction.total_amount ? 'Sisa Hutang' : 'Kembali'}</span>
-               <span>{formatRupiah(Math.abs(lastTransaction.change || (lastTransaction.total_amount - lastTransaction.amount_paid)))}</span>
-             </div>
-             <div className="text-center mt-4 italic">{settings.footer_message}</div>
           </div>
         )}
       </div>
