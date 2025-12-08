@@ -52,15 +52,15 @@ export const supabase = (config.url && config.key)
 export const isUsingSupabase = !!supabase;
 
 // Mock Data for Offline/Demo Mode
-const MockAdmin: User = { id: 'demo-admin', username: 'admin', full_name: 'Admin Demo', role: UserRole.ADMIN };
-const MockCashier: User = { id: 'demo-cashier', username: 'kasir', full_name: 'Kasir Demo', role: UserRole.CASHIER };
+const MockAdmin: User = { id: 'demo-admin', username: 'admin', full_name: 'Admin Demo', role: UserRole.ADMIN, pin_code: '1234' };
+const MockCashier: User = { id: 'demo-cashier', username: 'kasir', full_name: 'Kasir Demo', role: UserRole.CASHIER, pin_code: '1111' };
 
 export const DataService = {
   // --- UTILS ---
   // Helper to check connection source
   getConnectionStatus: () => config.source,
 
-  // --- AUTH ---
+  // --- AUTH & USERS ---
   login: async (username: string, pin: string): Promise<User | null> => {
     // 1. Coba Login via Supabase jika ada config
     if (supabase) {
@@ -84,6 +84,29 @@ export const DataService = {
     if (username === 'kasir' && pin === '1111') return MockCashier;
 
     return null;
+  },
+
+  getUsers: async (): Promise<User[]> => {
+    if (!supabase) return [MockAdmin, MockCashier];
+    const { data } = await supabase.from('profiles').select('*').order('full_name');
+    return (data as User[]) || [];
+  },
+
+  saveUser: async (user: Partial<User>): Promise<void> => {
+    if (!supabase) return; // Cannot save in demo mode
+    const { id, ...payload } = user;
+    
+    // Check if updating or inserting
+    if (id && id.length > 10) { 
+       await supabase.from('profiles').update(payload).eq('id', id);
+    } else {
+       await supabase.from('profiles').insert([payload]);
+    }
+  },
+
+  deleteUser: async (id: string): Promise<void> => {
+    if (!supabase) return;
+    await supabase.from('profiles').delete().eq('id', id);
   },
 
   // --- PRODUCTS ---

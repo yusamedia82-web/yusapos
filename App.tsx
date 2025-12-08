@@ -317,15 +317,20 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
   };
 
   useEffect(() => {
-    const exactMatch = products.find(p => p.sku === search);
+    // Safety check: ensure products is loaded
+    if (!products.length) return;
+    
+    // Safety check: Ensure SKU is treated as string even if null
+    const exactMatch = products.find(p => (p.sku || '').toString() === search);
     if (exactMatch) {
       addToCart(exactMatch);
     }
   }, [search]);
 
+  // FIX: Added safe access to p.sku to prevent crash if SKU is null in database
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
-    p.sku.includes(search)
+    (p.sku || '').toString().toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -699,6 +704,10 @@ const Settings = () => {
   const [settings, setSettings] = useState<StoreSettings>({ name: '', address: '', phone: '', footer_message: '', printer_width: '58mm' });
   const [dbConfig, setDbConfig] = useState({ url: '', key: '' });
   
+  // User Management State
+  const [users, setUsers] = useState<User[]>([]);
+  const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
+
   useEffect(() => { 
     DataService.getSettings().then(setSettings); 
     setDbConfig({
@@ -706,6 +715,16 @@ const Settings = () => {
       key: localStorage.getItem('yusa_sb_key') || ''
     });
   }, []);
+  
+  const loadUsers = async () => {
+    if (activeTab === 'users') {
+        setUsers(await DataService.getUsers());
+    }
+  }
+
+  useEffect(() => {
+    loadUsers();
+  }, [activeTab]);
 
   const handleSaveSettings = async (e: React.FormEvent) => { 
     e.preventDefault(); 
@@ -730,21 +749,46 @@ const Settings = () => {
     }
   };
 
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+        await DataService.saveUser(editingUser);
+        setEditingUser(null);
+        loadUsers();
+    } catch(e) {
+        alert('Gagal menyimpan user. Pastikan Database terhubung.');
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (confirm('Hapus user ini?')) {
+        await DataService.deleteUser(id);
+        loadUsers();
+    }
+  };
+
   return (
     <div className="p-4 md:p-6">
         <h2 className="text-2xl font-bold mb-6">Pengaturan</h2>
         
-        <div className="bg-white rounded-lg shadow overflow-hidden max-w-3xl">
-          <div className="flex border-b">
+        <div className="bg-white rounded-lg shadow overflow-hidden max-w-4xl">
+          <div className="flex border-b overflow-x-auto">
             <button 
               onClick={() => setActiveTab('general')}
-              className={`flex-1 py-4 text-sm font-medium border-b-2 transition ${activeTab === 'general' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-4 px-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'general' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
             >
               Identitas Toko & Printer
             </button>
             <button 
+              onClick={() => setActiveTab('users')}
+              className={`flex-1 py-4 px-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              Manajemen Pengguna
+            </button>
+            <button 
               onClick={() => setActiveTab('database')}
-              className={`flex-1 py-4 text-sm font-medium border-b-2 transition ${activeTab === 'database' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-4 px-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'database' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
             >
               Database & Schema
             </button>
@@ -766,6 +810,82 @@ const Settings = () => {
                   </div>
                   <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded w-full font-bold hover:bg-indigo-700">Simpan Perubahan</button>
               </form>
+            )}
+
+            {activeTab === 'users' && (
+                <div>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-lg">Daftar Admin & Kasir</h3>
+                        <button onClick={() => setEditingUser({role: UserRole.CASHIER, username: '', full_name: '', pin_code: ''})} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700">Tambah User</button>
+                    </div>
+                    {!isUsingSupabase && <div className="mb-4 bg-yellow-50 text-yellow-800 text-sm p-3 rounded">Fitur edit user hanya tersedia jika Database Supabase terhubung. Dalam mode demo, data ini statis.</div>}
+                    
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 uppercase text-xs font-bold text-slate-500">
+                                <tr>
+                                    <th className="px-4 py-3">Nama Lengkap</th>
+                                    <th className="px-4 py-3">Username</th>
+                                    <th className="px-4 py-3">Role</th>
+                                    <th className="px-4 py-3">PIN</th>
+                                    <th className="px-4 py-3">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {users.map(u => (
+                                    <tr key={u.id} className="hover:bg-slate-50">
+                                        <td className="px-4 py-3">{u.full_name}</td>
+                                        <td className="px-4 py-3 font-mono">{u.username}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                {u.role.toUpperCase()}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 font-mono">****</td>
+                                        <td className="px-4 py-3">
+                                            <button onClick={() => setEditingUser(u)} className="text-blue-600 hover:underline mr-3">Edit</button>
+                                            <button onClick={() => handleDeleteUser(u.id)} className="text-red-600 hover:underline">Hapus</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Modal Edit User */}
+                    {editingUser && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                            <form onSubmit={handleSaveUser} className="bg-white p-6 rounded shadow-lg w-full max-w-sm">
+                                <h3 className="font-bold mb-4">{editingUser.id ? 'Edit User' : 'Tambah User'}</h3>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Nama Lengkap</label>
+                                        <input required className="border w-full p-2 rounded" value={editingUser.full_name} onChange={e => setEditingUser({...editingUser, full_name: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Username (Login)</label>
+                                        <input required className="border w-full p-2 rounded" value={editingUser.username} onChange={e => setEditingUser({...editingUser, username: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Role / Hak Akses</label>
+                                        <select className="border w-full p-2 rounded bg-white" value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as UserRole})}>
+                                            <option value={UserRole.CASHIER}>Kasir</option>
+                                            <option value={UserRole.ADMIN}>Admin</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">PIN Code (Angka)</label>
+                                        <input required type="text" className="border w-full p-2 rounded" value={editingUser.pin_code} onChange={e => setEditingUser({...editingUser, pin_code: e.target.value})} placeholder="Contoh: 1234" />
+                                    </div>
+                                    <div className="pt-2 flex gap-2">
+                                        <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded">Simpan</button>
+                                        <button type="button" onClick={() => setEditingUser(null)} className="flex-1 bg-slate-200 py-2 rounded">Batal</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </div>
             )}
 
             {activeTab === 'database' && (
