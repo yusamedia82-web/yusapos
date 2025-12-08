@@ -211,10 +211,12 @@ const Login = ({ onLogin }: { onLogin: (u: User) => void }) => {
             {loading ? 'Memproses...' : 'MASUK APLIKASI'}
           </button>
         </form>
-        <div className="mt-6 text-xs text-center text-slate-400">
-          <p>Demo Admin: <span className="font-mono bg-slate-100 px-1 rounded">admin</span> | <span className="font-mono bg-slate-100 px-1 rounded">1234</span></p>
-          <p className="mt-1">Demo Kasir: <span className="font-mono bg-slate-100 px-1 rounded">kasir</span> | <span className="font-mono bg-slate-100 px-1 rounded">1111</span></p>
-        </div>
+        {!isUsingSupabase && (
+          <div className="mt-6 text-xs text-center text-slate-400">
+            <p>Demo Admin: <span className="font-mono bg-slate-100 px-1 rounded">admin</span> | <span className="font-mono bg-slate-100 px-1 rounded">1234</span></p>
+            <p className="mt-1">Demo Kasir: <span className="font-mono bg-slate-100 px-1 rounded">kasir</span> | <span className="font-mono bg-slate-100 px-1 rounded">1111</span></p>
+          </div>
+        )}
       </div>
     </div>
   );

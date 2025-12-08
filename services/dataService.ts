@@ -74,15 +74,29 @@ export const DataService = {
 
   // --- AUTH & USERS ---
   login: async (username: string, pin: string): Promise<User | null> => {
+    // 1. Jika terkoneksi database (Supabase), PRIORITASKAN Database
     if (supabase) {
       try {
         const { data, error } = await supabase.from('profiles').select('*').eq('username', username).eq('pin_code', pin).single();
-        if (data && !error) return data as User;
-      } catch (e) { console.warn("Fallback to local"); }
+        
+        // Jika error atau data tidak ditemukan, return NULL (Login Gagal).
+        // Jangan lanjut ke fallback akun demo agar password database dihormati.
+        if (error || !data) {
+           return null;
+        }
+        
+        return data as User;
+      } catch (e) { 
+        console.warn("Database error", e);
+        // Jika terjadi error koneksi fatal, barulah return null (gagal)
+        return null;
+      }
     }
-    // Demo Login
+
+    // 2. Hanya jalankan Mode Demo/Offline JIKA Supabase TIDAK aktif
     if (username === 'admin' && pin === '1234') return MockAdmin;
     if (username === 'kasir' && pin === '1111') return MockCashier;
+    
     return null;
   },
 
