@@ -85,3 +85,23 @@ export interface SalesReport {
   total_profit: number;
   transaction_count: number;
 }
+
+// --- NEW TYPES FOR PURCHASING ---
+export interface PurchaseItem {
+  product_id: string;
+  product_name: string;
+  qty: number;
+  cost_price: number; // Harga Beli dari supplier
+  subtotal: number;
+}
+
+export interface Purchase {
+  id: string;
+  invoice_number: string; // No Nota dari Supplier
+  date: string;
+  supplier_id: string;
+  supplier_name: string;
+  admin_id: string;
+  items: PurchaseItem[];
+  total_amount: number;
+}

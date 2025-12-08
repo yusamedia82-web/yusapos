@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, UserRole, Product, Customer, CartItem, Transaction, StoreSettings, CustomerType, Supplier, SalesReport } from './types';
+import { User, UserRole, Product, Customer, CartItem, Transaction, StoreSettings, CustomerType, Supplier, SalesReport, Purchase, PurchaseItem } from './types';
 import { DataService, isUsingSupabase } from './services/dataService';
 import { formatRupiah, formatDate } from './utils/format';
 
@@ -100,6 +100,28 @@ create table transaction_items (
   subtotal numeric default 0
 );
 
+-- 8. Table Purchases (Restock)
+create table purchases (
+  id uuid default gen_random_uuid() primary key,
+  invoice_number text, -- Dari supplier
+  date timestamp with time zone default timezone('utc'::text, now()),
+  supplier_id uuid references suppliers(id),
+  supplier_name text,
+  admin_id text,
+  total_amount numeric default 0
+);
+
+-- 9. Table Purchase Items
+create table purchase_items (
+  id uuid default gen_random_uuid() primary key,
+  purchase_id uuid references purchases(id),
+  product_id uuid references products(id),
+  product_name text,
+  qty integer default 1,
+  cost_price numeric default 0,
+  subtotal numeric default 0
+);
+
 -- Enable RLS (Optional for simplicity, we keep it public for now or you can enable it)
 alter table profiles enable row level security;
 create policy "Public access" on profiles for all using (true);
@@ -120,7 +142,8 @@ const Icons = {
   Settings: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
   Truck: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg>,
   Cart: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
-  Database: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>
+  Database: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>,
+  Purchase: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
 };
 
 // --- LOGIN COMPONENT ---
@@ -230,6 +253,7 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
   const [amountPaid, setAmountPaid] = useState('');
   const [lastTransaction, setLastTransaction] = useState<Transaction | null>(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
+  const [paymentError, setPaymentError] = useState(''); // Error state for modal
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -288,14 +312,16 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
   const grandTotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
 
   const handleCheckout = async () => {
+    setPaymentError('');
     const paid = parseInt(amountPaid.replace(/\D/g, '')) || 0;
     const isDebt = paid < grandTotal;
     
     // Fallback if no customer selected
-    const cust = selectedCustomer || { id: 'guest', name: 'Umum', type: CustomerType.GENERAL };
+    const cust = selectedCustomer || { id: 'guest', name: 'Umum', type: CustomerType.GENERAL, debt: 0, phone: '-' } as Customer;
 
     if (isDebt && cust.type === CustomerType.GENERAL) {
-      return alert('Pelanggan Umum tidak boleh hutang!');
+      setPaymentError('Pelanggan Umum tidak boleh hutang! Mohon bayar lunas.');
+      return;
     }
 
     const tx: Transaction = {
@@ -392,19 +418,19 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
           </div>
         </div>
 
-        {/* Mobile Bottom Bar for Cart */}
-        <div className="md:hidden absolute bottom-0 left-0 right-0 bg-white border-t p-3 shadow-lg flex items-center justify-between z-10" onClick={() => setShowMobileCart(true)}>
+        {/* Mobile Bottom Bar for Cart (FIXED POSITION) */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex items-center justify-between z-50" onClick={() => setShowMobileCart(true)}>
              <div className="flex items-center gap-3">
                <div className="bg-indigo-600 text-white p-2 rounded-full relative">
                  <Icons.Cart />
-                 {cart.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">{cart.reduce((a,b)=>a+b.qty,0)}</span>}
+                 {cart.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center border border-white">{cart.reduce((a,b)=>a+b.qty,0)}</span>}
                </div>
                <div>
                  <div className="text-xs text-slate-500">Total Belanja</div>
-                 <div className="font-bold text-indigo-700">{formatRupiah(grandTotal)}</div>
+                 <div className="font-bold text-indigo-700 text-lg">{formatRupiah(grandTotal)}</div>
                </div>
              </div>
-             <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Lihat</button>
+             <button className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg shadow-indigo-200">Lihat</button>
         </div>
       </div>
 
@@ -444,7 +470,11 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
               </div>
               <button 
                 disabled={cart.length === 0}
-                onClick={() => setPaymentModal(true)}
+                onClick={() => {
+                  setAmountPaid(grandTotal.toString()); // Auto-fill amount for easier checkout
+                  setPaymentError('');
+                  setPaymentModal(true);
+                }}
                 className="w-full bg-green-600 text-white py-3.5 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 text-lg shadow-lg shadow-green-200"
               >
                 BAYAR SEKARANG
@@ -462,6 +492,10 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
               <label className="block text-xs uppercase text-slate-500 mb-1 tracking-wider">Total Tagihan</label>
               <div className="text-3xl font-bold text-slate-800">{formatRupiah(grandTotal)}</div>
             </div>
+            
+            {/* Validation Message */}
+            {paymentError && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-xs font-bold border border-red-100 text-center">{paymentError}</div>}
+            
             <div className="mb-6">
               <label className="block text-sm mb-2 font-medium">Jumlah Uang Diterima</label>
               <input 
@@ -469,7 +503,10 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
                 type="number" 
                 className="w-full text-xl p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 value={amountPaid}
-                onChange={e => setAmountPaid(e.target.value)}
+                onChange={e => {
+                  setAmountPaid(e.target.value);
+                  setPaymentError('');
+                }}
                 placeholder="0"
               />
               <div className="grid grid-cols-3 gap-2 mt-3">
@@ -550,6 +587,162 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+// --- PURCHASE MANAGER (NEW) ---
+const PurchaseManager = ({ user }: { user: User }) => {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [cart, setCart] = useState<PurchaseItem[]>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    DataService.getSuppliers().then(setSuppliers);
+    DataService.getProducts().then(setProducts);
+  }, []);
+
+  const addToCart = (product: Product) => {
+    const existing = cart.find(i => i.product_id === product.id);
+    if (existing) return; // Prevent duplicate rows for simplicity, allow editing qty instead
+    
+    setCart(prev => [...prev, {
+        product_id: product.id,
+        product_name: product.name,
+        qty: 1,
+        cost_price: product.cost_price, // Default to current cost price
+        subtotal: product.cost_price * 1
+    }]);
+    setSearch('');
+  };
+
+  const updateItem = (productId: string, field: 'qty' | 'cost_price', value: number) => {
+    setCart(prev => prev.map(item => {
+        if (item.product_id === productId) {
+            const newVal = Math.max(0, value);
+            const newSubtotal = field === 'qty' ? newVal * item.cost_price : item.qty * newVal;
+            return { ...item, [field]: newVal, subtotal: newSubtotal };
+        }
+        return item;
+    }));
+  };
+
+  const removeItem = (productId: string) => {
+    setCart(prev => prev.filter(i => i.product_id !== productId));
+  };
+
+  const handleProcessPurchase = async () => {
+    if (!selectedSupplier) return alert('Pilih Supplier terlebih dahulu');
+    if (!invoiceNumber) return alert('Masukkan Nomor Nota dari Supplier');
+    if (cart.length === 0) return alert('Keranjang pembelian kosong');
+
+    if (!confirm('Proses pembelian ini? Stok produk akan bertambah dan harga modal akan diperbarui.')) return;
+
+    setLoading(true);
+    try {
+        const supplierName = suppliers.find(s => s.id === selectedSupplier)?.name || 'Unknown';
+        await DataService.createPurchase({
+            id: '',
+            invoice_number: invoiceNumber,
+            date: new Date().toISOString(),
+            supplier_id: selectedSupplier,
+            supplier_name: supplierName,
+            admin_id: user.id,
+            items: cart,
+            total_amount: cart.reduce((sum, i) => sum + i.subtotal, 0)
+        });
+        alert('Pembelian berhasil disimpan!');
+        setCart([]);
+        setInvoiceNumber('');
+        setSearch('');
+        // Refresh products to see updated stock
+        DataService.getProducts().then(setProducts);
+    } catch (e: any) {
+        alert(e.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) && !cart.find(c => c.product_id === p.id));
+
+  return (
+    <div className="p-4 md:p-6 h-full flex flex-col">
+        <h2 className="text-2xl font-bold mb-6">Pembelian Stok (Restock)</h2>
+        
+        <div className="flex flex-col md:flex-row gap-4 mb-4">
+            <div className="bg-white p-4 rounded shadow flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
+                <select className="border w-full p-2 rounded" value={selectedSupplier} onChange={e => setSelectedSupplier(e.target.value)}>
+                    <option value="">-- Pilih Supplier --</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+            </div>
+            <div className="bg-white p-4 rounded shadow flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">No. Nota Supplier</label>
+                <input className="border w-full p-2 rounded" placeholder="Contoh: INV-SUP-001" value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} />
+            </div>
+        </div>
+
+        <div className="bg-white p-4 rounded shadow flex-1 flex flex-col min-h-0">
+            <div className="relative mb-4">
+                <input 
+                    className="border w-full p-2 rounded pl-10" 
+                    placeholder="Cari produk untuk ditambahkan..." 
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                />
+                <div className="absolute left-3 top-2.5 text-slate-400"><Icons.Product /></div>
+                
+                {search && filteredProducts.length > 0 && (
+                    <div className="absolute z-10 w-full bg-white border shadow-lg mt-1 max-h-60 overflow-y-auto rounded-b">
+                        {filteredProducts.map(p => (
+                            <div key={p.id} onClick={() => addToCart(p)} className="p-2 hover:bg-indigo-50 cursor-pointer border-b last:border-0 flex justify-between">
+                                <span>{p.name}</span>
+                                <span className="text-xs text-slate-500">Stok: {p.stock}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="flex-1 overflow-auto border rounded">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 sticky top-0">
+                        <tr>
+                            <th className="p-3">Produk</th>
+                            <th className="p-3 w-24">Qty Masuk</th>
+                            <th className="p-3 w-40">Harga Beli (Satuan)</th>
+                            <th className="p-3 w-40 text-right">Subtotal</th>
+                            <th className="p-3 w-10"></th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                        {cart.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">Belum ada item dipilih</td></tr>}
+                        {cart.map(item => (
+                            <tr key={item.product_id}>
+                                <td className="p-3">{item.product_name}</td>
+                                <td className="p-3"><input type="number" min="1" className="border w-full p-1 rounded text-center" value={item.qty} onChange={e => updateItem(item.product_id, 'qty', parseInt(e.target.value))} /></td>
+                                <td className="p-3"><input type="number" min="0" className="border w-full p-1 rounded" value={item.cost_price} onChange={e => updateItem(item.product_id, 'cost_price', parseInt(e.target.value))} /></td>
+                                <td className="p-3 text-right font-medium">{formatRupiah(item.subtotal)}</td>
+                                <td className="p-3 text-center"><button onClick={() => removeItem(item.product_id)} className="text-red-500 hover:text-red-700"><Icons.Close /></button></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="flex justify-between items-center mt-4 pt-4 border-t">
+                 <div className="text-xl font-bold">Total: {formatRupiah(cart.reduce((a,b) => a + b.subtotal, 0))}</div>
+                 <button onClick={handleProcessPurchase} disabled={loading || cart.length === 0} className="bg-indigo-600 text-white px-6 py-2 rounded font-bold hover:bg-indigo-700 disabled:opacity-50">
+                    {loading ? 'Menyimpan...' : 'PROSES PEMBELIAN'}
+                 </button>
+            </div>
+        </div>
     </div>
   );
 };
@@ -985,6 +1178,9 @@ function App() {
           <MenuItem id="pos" label="Kasir (POS)" icon={Icons.POS} />
           {user.role === UserRole.ADMIN && (
             <>
+              <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase mt-4">Transaksi</div>
+              <MenuItem id="purchasing" label="Pembelian" icon={Icons.Purchase} />
+
               <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase mt-4">Master Data</div>
               <MenuItem id="products" label="Produk" icon={Icons.Product} />
               <MenuItem id="customers" label="Pelanggan" icon={Icons.Users} />
@@ -1021,6 +1217,7 @@ function App() {
         <div className="flex-1 overflow-auto bg-slate-100">
             {view === 'dashboard' && <Dashboard />}
             {view === 'pos' && <POS user={user} settings={settings} />}
+            {view === 'purchasing' && <PurchaseManager user={user} />}
             {view === 'products' && <ProductManager />}
             {view === 'customers' && <CustomerManager />}
             {view === 'suppliers' && <SupplierManager />}

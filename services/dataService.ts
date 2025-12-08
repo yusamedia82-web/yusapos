@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Product, Customer, Transaction, StoreSettings, User, Supplier, SalesReport, CartItem, UserRole, CustomerType } from '../types';
+import { Product, Customer, Transaction, StoreSettings, User, Supplier, SalesReport, CartItem, UserRole, CustomerType, Purchase } from '../types';
 
 // Safely access environment variables
 const getEnv = (key: string) => {
@@ -176,7 +176,7 @@ export const DataService = {
     else await supabase.from('store_settings').insert([settings]);
   },
 
-  // --- TRANSACTIONS ---
+  // --- TRANSACTIONS (SALES) ---
   createTransaction: async (transaction: Transaction): Promise<void> => {
     if (!supabase) { console.log("Transaction saved (Mock):", transaction); return; }
     
@@ -208,7 +208,14 @@ export const DataService = {
     }));
 
     await supabase.from('transaction_items').insert(itemsPayload);
-    // Stock update logic omitted for brevity in sync but exists in backend logic
+    
+    // Reduce Stock Logic
+    for (const item of transaction.items) {
+      const { data: prod } = await supabase.from('products').select('stock').eq('id', item.id).single();
+      if (prod) {
+        await supabase.from('products').update({ stock: prod.stock - item.qty }).eq('id', item.id);
+      }
+    }
   },
 
   getTransactions: async (): Promise<Transaction[]> => {
@@ -227,5 +234,47 @@ export const DataService = {
     // Basic mock reporting logic
     const transactions = await DataService.getTransactions();
     return []; 
+  },
+
+  // --- PURCHASES (RESTOCK) ---
+  createPurchase: async (purchase: Purchase): Promise<void> => {
+    if (!supabase) { console.log("Purchase saved (Mock):", purchase); return; }
+
+    // 1. Insert Purchase Header
+    const { data: pData, error: pError } = await supabase.from('purchases').insert([{
+        invoice_number: purchase.invoice_number,
+        date: purchase.date,
+        supplier_id: purchase.supplier_id,
+        supplier_name: purchase.supplier_name,
+        admin_id: purchase.admin_id,
+        total_amount: purchase.total_amount
+    }]).select().single();
+
+    if (pError || !pData) throw new Error("Gagal menyimpan pembelian: " + pError?.message);
+
+    const purchaseId = pData.id;
+
+    // 2. Insert Items & Update Stock
+    const itemsPayload = purchase.items.map(item => ({
+        purchase_id: purchaseId,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        qty: item.qty,
+        cost_price: item.cost_price,
+        subtotal: item.subtotal
+    }));
+
+    await supabase.from('purchase_items').insert(itemsPayload);
+
+    // 3. Update Stock & Cost Price in Product Master
+    for (const item of purchase.items) {
+        const { data: prod } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
+        if (prod) {
+            await supabase.from('products').update({ 
+                stock: prod.stock + item.qty,
+                cost_price: item.cost_price // Update HPP terbaru
+            }).eq('id', item.product_id);
+        }
+    }
   }
 };
