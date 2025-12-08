@@ -4,10 +4,10 @@ import { DataService, isUsingSupabase } from './services/dataService';
 import { formatRupiah, formatDate } from './utils/format';
 
 // --- SQL SCHEMA CONSTANT ---
-const SQL_SCHEMA = `-- COPY KODE INI KE SUPABASE SQL EDITOR --
+const SQL_SCHEMA = `-- COPY KODE INI KE SUPABASE SQL EDITOR DAN KLIK RUN --
 
 -- 1. Table Profiles (Admin/Kasir)
-create table profiles (
+create table if not exists profiles (
   id uuid default gen_random_uuid() primary key,
   username text unique not null,
   pin_code text not null,
@@ -27,7 +27,7 @@ values ('kasir', '1111', 'Kasir Toko', 'cashier')
 on conflict (username) do nothing;
 
 -- 2. Table Store Settings
-create table store_settings (
+create table if not exists store_settings (
   id uuid default gen_random_uuid() primary key,
   name text default 'YusaPos Store',
   address text,
@@ -37,7 +37,7 @@ create table store_settings (
 );
 
 -- 3. Table Suppliers
-create table suppliers (
+create table if not exists suppliers (
   id uuid default gen_random_uuid() primary key,
   name text not null,
   contact text,
@@ -46,7 +46,7 @@ create table suppliers (
 );
 
 -- 4. Table Customers
-create table customers (
+create table if not exists customers (
   id uuid default gen_random_uuid() primary key,
   name text not null,
   phone text,
@@ -57,7 +57,7 @@ create table customers (
 );
 
 -- 5. Table Products
-create table products (
+create table if not exists products (
   id uuid default gen_random_uuid() primary key,
   sku text,
   name text not null,
@@ -73,7 +73,7 @@ create table products (
 );
 
 -- 6. Table Transactions
-create table transactions (
+create table if not exists transactions (
   id uuid default gen_random_uuid() primary key,
   invoice_number text not null,
   date timestamp with time zone default timezone('utc'::text, now()),
@@ -89,7 +89,7 @@ create table transactions (
 );
 
 -- 7. Table Transaction Items
-create table transaction_items (
+create table if not exists transaction_items (
   id uuid default gen_random_uuid() primary key,
   transaction_id uuid references transactions(id),
   product_id uuid references products(id),
@@ -101,7 +101,7 @@ create table transaction_items (
 );
 
 -- 8. Table Purchases (Restock)
-create table purchases (
+create table if not exists purchases (
   id uuid default gen_random_uuid() primary key,
   invoice_number text, -- Dari supplier
   date timestamp with time zone default timezone('utc'::text, now()),
@@ -112,7 +112,7 @@ create table purchases (
 );
 
 -- 9. Table Purchase Items
-create table purchase_items (
+create table if not exists purchase_items (
   id uuid default gen_random_uuid() primary key,
   purchase_id uuid references purchases(id),
   product_id uuid references products(id),
@@ -122,32 +122,41 @@ create table purchase_items (
   subtotal numeric default 0
 );
 
--- Enable RLS & Policies
+-- Enable RLS & Policies (Aman dijalankan berulang)
 alter table profiles enable row level security;
+drop policy if exists "Public access profiles" on profiles;
 create policy "Public access profiles" on profiles for all using (true);
 
 alter table products enable row level security;
+drop policy if exists "Public access products" on products;
 create policy "Public access products" on products for all using (true);
 
 alter table transactions enable row level security;
+drop policy if exists "Public access transactions" on transactions;
 create policy "Public access transactions" on transactions for all using (true);
 
 alter table transaction_items enable row level security;
+drop policy if exists "Public access transaction_items" on transaction_items;
 create policy "Public access transaction_items" on transaction_items for all using (true);
 
 alter table customers enable row level security;
+drop policy if exists "Public access customers" on customers;
 create policy "Public access customers" on customers for all using (true);
 
 alter table suppliers enable row level security;
+drop policy if exists "Public access suppliers" on suppliers;
 create policy "Public access suppliers" on suppliers for all using (true);
 
 alter table store_settings enable row level security;
+drop policy if exists "Public access settings" on store_settings;
 create policy "Public access settings" on store_settings for all using (true);
 
 alter table purchases enable row level security;
+drop policy if exists "Public access purchases" on purchases;
 create policy "Public access purchases" on purchases for all using (true);
 
 alter table purchase_items enable row level security;
+drop policy if exists "Public access purchase_items" on purchase_items;
 create policy "Public access purchase_items" on purchase_items for all using (true);
 `;
 
@@ -1237,7 +1246,16 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    DataService.getSettings().then(setSettings);
+    DataService.getSettings()
+      .then(setSettings)
+      // Prevent app from getting stuck on 'Loading...' if DB fails
+      .catch(() => setSettings({ 
+        name: 'YusaPos Store', 
+        address: 'Offline Mode / Error', 
+        phone: '-', 
+        footer_message: 'System Error', 
+        printer_width: '58mm' 
+      }));
   }, []);
 
   if (!user) return <Login onLogin={setUser} />;
