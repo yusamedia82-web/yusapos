@@ -321,17 +321,20 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
     if (!products.length) return;
     
     // Safety check: Ensure SKU is treated as string even if null
-    const exactMatch = products.find(p => (p.sku || '').toString() === search);
+    const exactMatch = products.find(p => p && (p.sku || '').toString() === search);
     if (exactMatch) {
       addToCart(exactMatch);
     }
   }, [search]);
 
-  // FIX: Added safe access to p.sku to prevent crash if SKU is null in database
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    (p.sku || '').toString().toLowerCase().includes(search.toLowerCase())
-  );
+  // FIX: ROBUST FILTERING to prevent "Blank Screen" if p is null or name/sku is undefined
+  const filteredProducts = products.filter(p => {
+    if (!p) return false;
+    const s = search.toLowerCase();
+    const name = (p.name || '').toLowerCase();
+    const sku = (p.sku || '').toString().toLowerCase();
+    return name.includes(s) || sku.includes(s);
+  });
 
   return (
     <div className="flex h-full overflow-hidden bg-slate-100 flex-col md:flex-row relative">
