@@ -1,35 +1,40 @@
 import { createClient } from '@supabase/supabase-js';
 import { Product, Customer, Transaction, StoreSettings, User, Supplier, SalesReport, CartItem, UserRole, CustomerType, Purchase } from '../types';
 
-// Safely access environment variables
+// Safely access environment variables with multiple fallbacks
 const getEnv = (key: string) => {
+  let val = '';
   try {
     // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env) {
       // @ts-ignore
-      return import.meta.env[key] || '';
+      val = import.meta.env[key] || '';
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
   
-  try {
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) {
+  if (!val) {
+    try {
       // @ts-ignore
-      return process.env[key] || '';
-    }
-  } catch (e) {
-    // ignore
+      if (typeof process !== 'undefined' && process.env) {
+        // @ts-ignore
+        val = process.env[key] || '';
+      }
+    } catch (e) {}
   }
-  
-  return '';
+  return val;
 };
 
-// Logic: Prioritize LocalStorage settings (User input), fallback to Env Vars (Vercel config)
+// Robust config retrieval that won't crash on LocalStorage errors
 const getSupabaseConfig = () => {
-  const localUrl = localStorage.getItem('yusa_sb_url');
-  const localKey = localStorage.getItem('yusa_sb_key');
+  let localUrl = null;
+  let localKey = null;
+
+  try {
+    localUrl = localStorage.getItem('yusa_sb_url');
+    localKey = localStorage.getItem('yusa_sb_key');
+  } catch (e) {
+    console.warn("LocalStorage unavailable:", e);
+  }
 
   if (localUrl && localKey) {
     return { url: localUrl, key: localKey, source: 'local' };
@@ -44,15 +49,23 @@ const getSupabaseConfig = () => {
 
 const config = getSupabaseConfig();
 
-// Initialize Supabase only if config exists
-export const supabase = (config.url && config.key) 
-  ? createClient(config.url, config.key)
-  : null;
+// Initialize Supabase safely
+// prevent crash if URL is malformed or missing
+export let supabase: any = null;
+export let isUsingSupabase = false;
 
-export const isUsingSupabase = !!supabase;
+try {
+  if (config.url && config.key && config.url.startsWith('http')) {
+    supabase = createClient(config.url, config.key);
+    isUsingSupabase = true;
+  }
+} catch (e) {
+  console.error("Supabase initialization failed:", e);
+  supabase = null;
+  isUsingSupabase = false;
+}
 
 // --- MOCK DATA FOR DEMO/OFFLINE MODE ---
-// Updated Mock IDs to be valid UUIDs to prevent confusion, though only used in offline mode.
 const MockAdmin: User = { id: '00000000-0000-0000-0000-000000000001', username: 'admin', full_name: 'Admin Demo', role: UserRole.ADMIN, pin_code: '1234' };
 const MockCashier: User = { id: '00000000-0000-0000-0000-000000000002', username: 'kasir', full_name: 'Kasir Demo', role: UserRole.CASHIER, pin_code: '1111' };
 
@@ -69,150 +82,151 @@ const MockProducts: Product[] = [
 ];
 
 export const DataService = {
-  // --- UTILS ---
   getConnectionStatus: () => config.source,
 
   // --- AUTH & USERS ---
   login: async (username: string, pin: string): Promise<User | null> => {
-    // 1. Jika terkoneksi database (Supabase), PRIORITASKAN Database
-    if (supabase) {
+    // 1. Jika terkoneksi Supabase, HANYA cek database.
+    if (isUsingSupabase && supabase) {
       try {
         const { data, error } = await supabase.from('profiles').select('*').eq('username', username).eq('pin_code', pin).single();
-        
-        // Jika error atau data tidak ditemukan, return NULL (Login Gagal).
-        // Jangan lanjut ke fallback akun demo agar password database dihormati.
-        if (error || !data) {
-           return null;
-        }
-        
+        if (error || !data) return null;
         return data as User;
-      } catch (e) { 
-        console.warn("Database error", e);
-        // Jika terjadi error koneksi fatal, barulah return null (gagal)
+      } catch (e) {
+        console.warn("Auth Error:", e);
         return null;
       }
     }
 
-    // 2. Hanya jalankan Mode Demo/Offline JIKA Supabase TIDAK aktif
-    if (username === 'admin' && pin === '1234') return MockAdmin;
-    if (username === 'kasir' && pin === '1111') return MockCashier;
+    // 2. Mode Demo (Fallback hanya jika Supabase OFF)
+    if (!isUsingSupabase) {
+       if (username === 'admin' && pin === '1234') return MockAdmin;
+       if (username === 'kasir' && pin === '1111') return MockCashier;
+    }
     
     return null;
   },
 
   getUsers: async (): Promise<User[]> => {
-    if (!supabase) return [MockAdmin, MockCashier];
+    if (!isUsingSupabase) return [MockAdmin, MockCashier];
     const { data } = await supabase.from('profiles').select('*').order('full_name');
-    return (data as User[]) || [MockAdmin, MockCashier];
+    return (data as User[]) || [];
   },
 
   saveUser: async (user: Partial<User>): Promise<void> => {
-    if (!supabase) throw new Error("Fitur simpan user hanya aktif dengan database Supabase.");
+    if (!isUsingSupabase) throw new Error("Fitur ini perlu Database.");
     const { id, ...payload } = user;
     if (id && id.length > 10) await supabase.from('profiles').update(payload).eq('id', id);
     else await supabase.from('profiles').insert([payload]);
   },
 
   deleteUser: async (id: string): Promise<void> => {
-    if (!supabase) throw new Error("Fitur hapus user hanya aktif dengan database Supabase.");
+    if (!isUsingSupabase) throw new Error("Fitur ini perlu Database.");
     await supabase.from('profiles').delete().eq('id', id);
   },
 
   // --- PRODUCTS ---
   getProducts: async (): Promise<Product[]> => {
-    if (!supabase) return MockProducts;
-    const { data } = await supabase.from('products').select('*').order('name');
-    
-    // Auto-Seed: If DB is empty, fill with default products so user doesn't get errors
-    if (!data || data.length === 0) {
-        console.log("Seeding Products...");
-        // Remove ID so DB generates UUIDs
-        const seedData = MockProducts.map(({ id, ...rest }) => rest);
-        const { data: newData } = await supabase.from('products').insert(seedData).select();
-        return (newData as Product[]) || [];
+    if (!isUsingSupabase) return MockProducts;
+    try {
+      const { data } = await supabase.from('products').select('*').order('name');
+      
+      // Auto-Seed if empty
+      if (!data || data.length === 0) {
+          const seedData = MockProducts.map(({ id, ...rest }) => rest);
+          const { data: newData } = await supabase.from('products').insert(seedData).select();
+          return (newData as Product[]) || [];
+      }
+      return data as Product[];
+    } catch(e) {
+      console.warn("Product fetch error", e);
+      return [];
     }
-    
-    return data as Product[];
   },
 
   saveProduct: async (product: Product): Promise<void> => {
-    if (!supabase) return;
+    if (!isUsingSupabase) return;
     const { id, ...payload } = product;
     if (id && id.length > 10) await supabase.from('products').update(payload).eq('id', id);
     else await supabase.from('products').insert([payload]);
   },
 
   deleteProduct: async (id: string): Promise<void> => {
-    if (!supabase) return;
+    if (!isUsingSupabase) return;
     await supabase.from('products').delete().eq('id', id);
   },
 
   // --- CUSTOMERS ---
   getCustomers: async (): Promise<Customer[]> => {
-    if (!supabase) return MockCustomers;
-    const { data } = await supabase.from('customers').select('*').order('name');
-    
-    // Auto-Seed: If DB is empty, create 'Pelanggan Umum' with valid UUID
-    if (!data || data.length === 0) {
-        console.log("Seeding Customers...");
-        const defaultCust = { name: 'Pelanggan Umum', type: CustomerType.GENERAL, phone: '-', debt: 0 };
-        const { data: newData } = await supabase.from('customers').insert([defaultCust]).select();
-        return (newData as Customer[]) || [];
-    }
-
-    return data as Customer[];
+    if (!isUsingSupabase) return MockCustomers;
+    try {
+      const { data } = await supabase.from('customers').select('*').order('name');
+      if (!data || data.length === 0) {
+          const defaultCust = { name: 'Pelanggan Umum', type: CustomerType.GENERAL, phone: '-', debt: 0 };
+          const { data: newData } = await supabase.from('customers').insert([defaultCust]).select();
+          return (newData as Customer[]) || [];
+      }
+      return data as Customer[];
+    } catch (e) { return []; }
   },
 
   saveCustomer: async (customer: Customer): Promise<void> => {
-    if (!supabase) return;
+    if (!isUsingSupabase) return;
     const { id, ...payload } = customer;
     if (id && id.length > 10) await supabase.from('customers').update(payload).eq('id', id);
     else await supabase.from('customers').insert([payload]);
   },
 
   deleteCustomer: async (id: string): Promise<void> => {
-    if (!supabase) return;
+    if (!isUsingSupabase) return;
     await supabase.from('customers').delete().eq('id', id);
   },
 
   // --- SUPPLIERS ---
   getSuppliers: async (): Promise<Supplier[]> => {
-    if (!supabase) return [];
-    const { data } = await supabase.from('suppliers').select('*').order('name');
-    return (data as Supplier[]) || [];
+    if (!isUsingSupabase) return [];
+    try {
+      const { data } = await supabase.from('suppliers').select('*').order('name');
+      return (data as Supplier[]) || [];
+    } catch(e) { return []; }
   },
 
   saveSupplier: async (supplier: Supplier): Promise<void> => {
-    if (!supabase) return;
+    if (!isUsingSupabase) return;
     const { id, ...payload } = supplier;
     if (id && id.length > 10) await supabase.from('suppliers').update(payload).eq('id', id);
     else await supabase.from('suppliers').insert([payload]);
   },
 
   deleteSupplier: async (id: string): Promise<void> => {
-    if (!supabase) return;
+    if (!isUsingSupabase) return;
     await supabase.from('suppliers').delete().eq('id', id);
   },
 
   // --- SETTINGS ---
   getSettings: async (): Promise<StoreSettings> => {
-    if (supabase) {
-        const { data } = await supabase.from('store_settings').select('*').single();
-        if (data) return data as StoreSettings;
+    if (isUsingSupabase) {
+        try {
+          const { data } = await supabase.from('store_settings').select('*').single();
+          if (data) return data as StoreSettings;
+        } catch (e) {
+          console.warn("Error fetching settings:", e);
+        }
     }
+    // Always return default to prevent infinite loading
     return { name: 'YusaPos Store', address: 'Mode Demo / Offline', phone: '-', footer_message: 'Terima Kasih', printer_width: '58mm' };
   },
 
   saveSettings: async (settings: StoreSettings): Promise<void> => {
-    if (!supabase) return;
+    if (!isUsingSupabase) return;
     const { data } = await supabase.from('store_settings').select('id').single();
     if (data) await supabase.from('store_settings').update(settings).eq('id', data.id);
     else await supabase.from('store_settings').insert([settings]);
   },
 
-  // --- TRANSACTIONS (SALES) ---
+  // --- TRANSACTIONS ---
   createTransaction: async (transaction: Transaction): Promise<void> => {
-    if (!supabase) { console.log("Transaction saved (Mock):", transaction); return; }
+    if (!isUsingSupabase) { console.log("Transaction saved (Mock):", transaction); return; }
     
     const { data: txData, error: txError } = await supabase.from('transactions').insert([{
       invoice_number: transaction.invoice_number,
@@ -243,7 +257,6 @@ export const DataService = {
 
     await supabase.from('transaction_items').insert(itemsPayload);
     
-    // Reduce Stock Logic
     for (const item of transaction.items) {
       const { data: prod } = await supabase.from('products').select('stock').eq('id', item.id).single();
       if (prod) {
@@ -253,28 +266,26 @@ export const DataService = {
   },
 
   getTransactions: async (): Promise<Transaction[]> => {
-    if (!supabase) return [];
-    const { data } = await supabase.from('transactions').select(`*, items:transaction_items (*)`).order('date', { ascending: false });
-    return data ? data.map((t: any) => ({
-      ...t,
-      items: t.items ? t.items.map((i: any) => ({
-        id: i.product_id, name: i.product_name, qty: i.qty, selected_price: i.price, subtotal: i.subtotal,
-        sku: '', category: '', stock: 0, price_general: 0, price_agen: 0, price_distributor: 0, discount: 0
-      })) : []
-    })) : [];
+    if (!isUsingSupabase) return [];
+    try {
+      const { data } = await supabase.from('transactions').select(`*, items:transaction_items (*)`).order('date', { ascending: false });
+      return data ? data.map((t: any) => ({
+        ...t,
+        items: t.items ? t.items.map((i: any) => ({
+          id: i.product_id, name: i.product_name, qty: i.qty, selected_price: i.price, subtotal: i.subtotal,
+          sku: '', category: '', stock: 0, price_general: 0, price_agen: 0, price_distributor: 0, discount: 0
+        })) : []
+      })) : [];
+    } catch (e) { return []; }
   },
 
   getReports: async (period: 'day' | 'month' | 'year'): Promise<SalesReport[]> => {
-    // Basic mock reporting logic
-    const transactions = await DataService.getTransactions();
     return []; 
   },
 
-  // --- PURCHASES (RESTOCK) ---
   createPurchase: async (purchase: Purchase): Promise<void> => {
-    if (!supabase) { console.log("Purchase saved (Mock):", purchase); return; }
+    if (!isUsingSupabase) { console.log("Purchase saved (Mock):", purchase); return; }
 
-    // 1. Insert Purchase Header
     const { data: pData, error: pError } = await supabase.from('purchases').insert([{
         invoice_number: purchase.invoice_number,
         date: purchase.date,
@@ -288,7 +299,6 @@ export const DataService = {
 
     const purchaseId = pData.id;
 
-    // 2. Insert Items & Update Stock
     const itemsPayload = purchase.items.map(item => ({
         purchase_id: purchaseId,
         product_id: item.product_id,
@@ -300,13 +310,12 @@ export const DataService = {
 
     await supabase.from('purchase_items').insert(itemsPayload);
 
-    // 3. Update Stock & Cost Price in Product Master
     for (const item of purchase.items) {
         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
         if (prod) {
             await supabase.from('products').update({ 
                 stock: prod.stock + item.qty,
-                cost_price: item.cost_price // Update HPP terbaru
+                cost_price: item.cost_price 
             }).eq('id', item.product_id);
         }
     }
