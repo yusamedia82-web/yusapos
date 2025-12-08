@@ -122,12 +122,33 @@ create table purchase_items (
   subtotal numeric default 0
 );
 
--- Enable RLS (Optional for simplicity, we keep it public for now or you can enable it)
+-- Enable RLS & Policies
 alter table profiles enable row level security;
-create policy "Public access" on profiles for all using (true);
+create policy "Public access profiles" on profiles for all using (true);
 
 alter table products enable row level security;
-create policy "Public access" on products for all using (true);
+create policy "Public access products" on products for all using (true);
+
+alter table transactions enable row level security;
+create policy "Public access transactions" on transactions for all using (true);
+
+alter table transaction_items enable row level security;
+create policy "Public access transaction_items" on transaction_items for all using (true);
+
+alter table customers enable row level security;
+create policy "Public access customers" on customers for all using (true);
+
+alter table suppliers enable row level security;
+create policy "Public access suppliers" on suppliers for all using (true);
+
+alter table store_settings enable row level security;
+create policy "Public access settings" on store_settings for all using (true);
+
+alter table purchases enable row level security;
+create policy "Public access purchases" on purchases for all using (true);
+
+alter table purchase_items enable row level security;
+create policy "Public access purchase_items" on purchase_items for all using (true);
 `;
 
 // --- ICONS ---
@@ -254,6 +275,7 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
   const [lastTransaction, setLastTransaction] = useState<Transaction | null>(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [paymentError, setPaymentError] = useState(''); // Error state for modal
+  const [processing, setProcessing] = useState(false); // New Processing State
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -270,13 +292,13 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement !== searchInputRef.current && e.key.length === 1) {
+      if (document.activeElement !== searchInputRef.current && e.key.length === 1 && !paymentModal && !successModal) {
         searchInputRef.current?.focus();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [paymentModal, successModal]);
 
   const getPrice = (product: Product, customer: Customer) => {
     if (!customer) return product.price_general;
@@ -311,9 +333,24 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
 
   const grandTotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
 
-  const handleCheckout = async () => {
+  const formatInputCurrency = (val: string) => {
+     // Remove non-digit characters
+     const num = parseInt(val.replace(/\D/g, '') || '0', 10);
+     return new Intl.NumberFormat('id-ID').format(num);
+  };
+
+  const handleSetAmountPaid = (val: string) => {
+    // Only allow digits to be set (will be formatted)
+    setAmountPaid(formatInputCurrency(val));
     setPaymentError('');
-    const paid = parseInt(amountPaid.replace(/\D/g, '')) || 0;
+  };
+
+  const handleCheckout = async () => {
+    if (processing) return;
+
+    setPaymentError('');
+    // Remove dots/commas before parsing
+    const paid = parseInt(amountPaid.replace(/\./g, '').replace(/,/g, '') || '0', 10);
     const isDebt = paid < grandTotal;
     
     // Fallback if no customer selected
@@ -324,29 +361,37 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
       return;
     }
 
-    const tx: Transaction = {
-      id: Math.random().toString(36).substr(2, 9),
-      invoice_number: `INV-${Date.now()}`,
-      date: new Date().toISOString(),
-      cashier_id: user.id,
-      cashier_name: user.full_name,
-      customer_id: cust.id,
-      customer_name: cust.name,
-      customer_type: cust.type,
-      items: cart,
-      total_amount: grandTotal,
-      amount_paid: paid,
-      change: Math.max(0, paid - grandTotal),
-      payment_method: isDebt ? 'debt' : 'cash'
-    };
+    setProcessing(true); // Start processing
+    try {
+        const tx: Transaction = {
+        id: Math.random().toString(36).substr(2, 9),
+        invoice_number: `INV-${Date.now()}`,
+        date: new Date().toISOString(),
+        cashier_id: user.id,
+        cashier_name: user.full_name,
+        customer_id: cust.id,
+        customer_name: cust.name,
+        customer_type: cust.type,
+        items: cart,
+        total_amount: grandTotal,
+        amount_paid: paid,
+        change: Math.max(0, paid - grandTotal),
+        payment_method: isDebt ? 'debt' : 'cash'
+        };
 
-    await DataService.createTransaction(tx);
-    setLastTransaction(tx);
-    setCart([]);
-    setPaymentModal(false);
-    setShowMobileCart(false);
-    setAmountPaid('');
-    setSuccessModal(true);
+        await DataService.createTransaction(tx);
+        setLastTransaction(tx);
+        setCart([]);
+        setPaymentModal(false);
+        setShowMobileCart(false);
+        setAmountPaid('');
+        setSuccessModal(true);
+    } catch(err: any) {
+        console.error(err);
+        setPaymentError('Gagal memproses transaksi: ' + (err.message || 'Error Database'));
+    } finally {
+        setProcessing(false); // End processing
+    }
   };
 
   useEffect(() => {
@@ -471,7 +516,7 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
               <button 
                 disabled={cart.length === 0}
                 onClick={() => {
-                  setAmountPaid(grandTotal.toString()); // Auto-fill amount for easier checkout
+                  setAmountPaid(formatInputCurrency(grandTotal.toString())); // Auto-fill amount for easier checkout
                   setPaymentError('');
                   setPaymentModal(true);
                 }}
@@ -500,24 +545,25 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
               <label className="block text-sm mb-2 font-medium">Jumlah Uang Diterima</label>
               <input 
                 autoFocus
-                type="number" 
-                className="w-full text-xl p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                type="tel" // Changed to tel for better mobile keypad
+                className="w-full text-xl p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700"
                 value={amountPaid}
-                onChange={e => {
-                  setAmountPaid(e.target.value);
-                  setPaymentError('');
-                }}
+                onChange={e => handleSetAmountPaid(e.target.value)}
                 placeholder="0"
+                disabled={processing}
               />
               <div className="grid grid-cols-3 gap-2 mt-3">
-                <button onClick={() => setAmountPaid(grandTotal.toString())} className="text-xs bg-slate-100 border px-2 py-2 rounded hover:bg-slate-200 font-medium">Uang Pas</button>
-                <button onClick={() => setAmountPaid('50000')} className="text-xs bg-slate-100 border px-2 py-2 rounded hover:bg-slate-200 font-medium">50.000</button>
-                <button onClick={() => setAmountPaid('100000')} className="text-xs bg-slate-100 border px-2 py-2 rounded hover:bg-slate-200 font-medium">100.000</button>
+                <button disabled={processing} onClick={() => handleSetAmountPaid(grandTotal.toString())} className="text-xs bg-slate-100 border px-2 py-2 rounded hover:bg-slate-200 font-medium">Uang Pas</button>
+                <button disabled={processing} onClick={() => handleSetAmountPaid('50000')} className="text-xs bg-slate-100 border px-2 py-2 rounded hover:bg-slate-200 font-medium">50.000</button>
+                <button disabled={processing} onClick={() => handleSetAmountPaid('100000')} className="text-xs bg-slate-100 border px-2 py-2 rounded hover:bg-slate-200 font-medium">100.000</button>
               </div>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setPaymentModal(false)} className="flex-1 py-3 border rounded-lg hover:bg-slate-50 font-medium">Batal</button>
-              <button onClick={handleCheckout} className="flex-1 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-md">Proses Bayar</button>
+              <button disabled={processing} onClick={() => setPaymentModal(false)} className="flex-1 py-3 border rounded-lg hover:bg-slate-50 font-medium">Batal</button>
+              <button disabled={processing} onClick={handleCheckout} className="flex-1 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-md flex items-center justify-center gap-2">
+                {processing && <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>}
+                {processing ? 'Memproses...' : 'Proses Bayar'}
+              </button>
             </div>
           </div>
         </div>
