@@ -1,0 +1,5 @@
+{
+  "name": "YusaPos",
+  "description": "Aplikasi Point of Sale lengkap dengan integrasi Supabase",
+  "requestFramePermissions": []
+}
