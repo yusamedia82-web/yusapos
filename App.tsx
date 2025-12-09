@@ -303,7 +303,16 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement !== searchInputRef.current && e.key.length === 1 && !paymentModal && !successModal) {
+      // FIX: Cek apakah user sedang mengetik di input lain (seperti qty input, text area, dll)
+      const target = e.target as HTMLElement;
+      const tagName = target.tagName.toUpperCase();
+      const isInput = tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+
+      // Hanya auto-focus ke search bar jika:
+      // 1. User TIDAK sedang mengetik di input lain
+      // 2. Tombol yang ditekan adalah 1 karakter (huruf/angka)
+      // 3. Tidak ada modal yang aktif
+      if (!isInput && document.activeElement !== searchInputRef.current && e.key.length === 1 && !paymentModal && !successModal) {
         searchInputRef.current?.focus();
       }
     };
