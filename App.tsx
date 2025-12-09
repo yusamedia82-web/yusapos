@@ -343,12 +343,18 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
      const product = products.find(p => p.id === id);
      if (!product) return;
 
-     // Allow empty string or 0 while typing
+     // Allow empty string to clear the field temporarily while typing
+     if (val === '') {
+         setCart(prev => prev.map(item => item.id === id ? { ...item, qty: 0, subtotal: 0 } : item));
+         return;
+     }
+
      let qty = parseInt(val);
+     // Prevent NaN or negative
      if (isNaN(qty) || qty < 0) qty = 0;
 
+     // Enforce stock limit silently (better UX than alert)
      if (qty > product.stock) {
-          alert(`Maksimal stok: ${product.stock}`);
           qty = product.stock;
      }
 
@@ -358,7 +364,8 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
   // Handle blur to reset empty/zero qty to 1
   const handleQtyBlur = (id: string) => {
      setCart(prev => prev.map(item => {
-        if (item.id === id && item.qty <= 0) {
+        // If left empty or 0, revert to 1
+        if (item.id === id && (item.qty <= 0)) {
             return { ...item, qty: 1, subtotal: 1 * item.selected_price };
         }
         return item;
@@ -550,8 +557,9 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
                     <div className="flex items-center mt-2 gap-2">
                          <input 
                             type="number" 
-                            min="0"
-                            className="w-16 p-1 border rounded text-center text-sm font-bold text-indigo-700 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            min="1"
+                            max={products.find(p => p.id === item.id)?.stock}
+                            className="w-20 p-2 border border-indigo-200 rounded text-center text-sm font-bold text-indigo-700 bg-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
                             value={item.qty === 0 ? '' : item.qty}
                             onChange={(e) => updateCartQty(item.id, e.target.value)}
                             onBlur={() => handleQtyBlur(item.id)}
