@@ -169,7 +169,7 @@ const Icons = {
   Product: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>,
   Users: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
   Report: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
-  Settings: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+  Settings: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
   Truck: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg>,
   Cart: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
   Database: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>,
@@ -338,20 +338,22 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
     setSearch(''); 
   };
 
+  // --- NEW FUNCTION: Manual Qty Update ---
   const updateCartQty = (id: string, val: string) => {
-    const product = products.find(p => p.id === id);
-    if (!product) return;
+     const product = products.find(p => p.id === id);
+     if (!product) return;
 
-    let qty = parseInt(val);
-    if (isNaN(qty) || qty < 1) qty = 1;
+     let qty = parseInt(val);
+     // Handle empty string or invalid input gracefully
+     if (isNaN(qty) || qty < 1) qty = 1;
 
-    if (qty > product.stock) {
-         alert(`Maksimal stok: ${product.stock}`);
-         qty = product.stock;
-    }
+     if (qty > product.stock) {
+          alert(`Maksimal stok: ${product.stock}`);
+          qty = product.stock;
+     }
 
-    setCart(prev => prev.map(item => item.id === id ? { ...item, qty, subtotal: qty * item.selected_price } : item));
- };
+     setCart(prev => prev.map(item => item.id === id ? { ...item, qty, subtotal: qty * item.selected_price } : item));
+  };
 
   const removeFromCart = (id: string) => {
     setCart(prev => prev.filter(i => i.id !== id));
@@ -527,16 +529,17 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
                 <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm border border-slate-100">
                   <div className="flex-1">
                     <div className="font-medium text-sm text-slate-800">{item.name}</div>
+                    {/* MODIFIED: Input for Quantity */}
                     <div className="flex items-center mt-2 gap-2">
-                        <input 
-                        type="number" 
-                        min="1"
-                        className="w-16 p-1 border rounded text-center text-sm font-bold text-indigo-700 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                        value={item.qty}
-                        onChange={(e) => updateCartQty(item.id, e.target.value)}
-                        onClick={(e) => (e.target as HTMLInputElement).select()}
-                        />
-                        <span className="text-xs text-slate-500">x {formatRupiah(item.selected_price)}</span>
+                         <input 
+                            type="number" 
+                            min="1"
+                            className="w-16 p-1 border rounded text-center text-sm font-bold text-indigo-700 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            value={item.qty}
+                            onChange={(e) => updateCartQty(item.id, e.target.value)}
+                            onClick={(e) => (e.target as HTMLInputElement).select()}
+                         />
+                         <span className="text-xs text-slate-500">x {formatRupiah(item.selected_price)}</span>
                     </div>
                   </div>
                   <div className="text-right pl-2">
