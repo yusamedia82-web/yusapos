@@ -338,14 +338,14 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
     setSearch(''); 
   };
 
-  // --- NEW FUNCTION: Manual Qty Update ---
+  // --- NEW FUNCTION: Manual Qty Update (Improved UX) ---
   const updateCartQty = (id: string, val: string) => {
      const product = products.find(p => p.id === id);
      if (!product) return;
 
+     // Allow empty string or 0 while typing
      let qty = parseInt(val);
-     // Handle empty string or invalid input gracefully
-     if (isNaN(qty) || qty < 1) qty = 1;
+     if (isNaN(qty) || qty < 0) qty = 0;
 
      if (qty > product.stock) {
           alert(`Maksimal stok: ${product.stock}`);
@@ -353,6 +353,16 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
      }
 
      setCart(prev => prev.map(item => item.id === id ? { ...item, qty, subtotal: qty * item.selected_price } : item));
+  };
+
+  // Handle blur to reset empty/zero qty to 1
+  const handleQtyBlur = (id: string) => {
+     setCart(prev => prev.map(item => {
+        if (item.id === id && item.qty <= 0) {
+            return { ...item, qty: 1, subtotal: 1 * item.selected_price };
+        }
+        return item;
+     }));
   };
 
   const removeFromCart = (id: string) => {
@@ -375,6 +385,13 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
 
   const handleCheckout = async () => {
     if (processing) return;
+
+    // Filter out items with 0 qty just in case
+    const validItems = cart.filter(i => i.qty > 0);
+    if (validItems.length === 0) {
+        alert("Keranjang belanja kosong atau jumlah item tidak valid.");
+        return;
+    }
 
     setPaymentError('');
     // Remove dots/commas before parsing
@@ -400,7 +417,7 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
         customer_id: cust.id,
         customer_name: cust.name,
         customer_type: cust.type,
-        items: cart,
+        items: validItems,
         total_amount: grandTotal,
         amount_paid: paid,
         change: Math.max(0, paid - grandTotal),
@@ -529,14 +546,15 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
                 <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm border border-slate-100">
                   <div className="flex-1">
                     <div className="font-medium text-sm text-slate-800">{item.name}</div>
-                    {/* MODIFIED: Input for Quantity */}
+                    {/* MODIFIED: Input for Quantity with Better UX */}
                     <div className="flex items-center mt-2 gap-2">
                          <input 
                             type="number" 
-                            min="1"
+                            min="0"
                             className="w-16 p-1 border rounded text-center text-sm font-bold text-indigo-700 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                            value={item.qty}
+                            value={item.qty === 0 ? '' : item.qty}
                             onChange={(e) => updateCartQty(item.id, e.target.value)}
+                            onBlur={() => handleQtyBlur(item.id)}
                             onClick={(e) => (e.target as HTMLInputElement).select()}
                          />
                          <span className="text-xs text-slate-500">x {formatRupiah(item.selected_price)}</span>
