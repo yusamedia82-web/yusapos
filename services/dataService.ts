@@ -66,6 +66,9 @@ try {
 }
 
 // --- MOCK DATA FOR DEMO/OFFLINE MODE ---
+// In-memory storage for demo transactions so reports work in demo mode (reset on refresh)
+let mockTransactions: Transaction[] = [];
+
 const MockAdmin: User = { id: '00000000-0000-0000-0000-000000000001', username: 'admin', full_name: 'Admin Demo', role: UserRole.ADMIN, pin_code: '1234' };
 const MockCashier: User = { id: '00000000-0000-0000-0000-000000000002', username: 'kasir', full_name: 'Kasir Demo', role: UserRole.CASHIER, pin_code: '1111' };
 
@@ -226,7 +229,12 @@ export const DataService = {
 
   // --- TRANSACTIONS ---
   createTransaction: async (transaction: Transaction): Promise<void> => {
-    if (!isUsingSupabase) { console.log("Transaction saved (Mock):", transaction); return; }
+    if (!isUsingSupabase) { 
+        // Save to memory for demo session
+        console.log("Transaction saved (Mock):", transaction); 
+        mockTransactions.unshift(transaction);
+        return; 
+    }
     
     const { data: txData, error: txError } = await supabase.from('transactions').insert([{
       invoice_number: transaction.invoice_number,
@@ -266,13 +274,18 @@ export const DataService = {
   },
 
   getTransactions: async (): Promise<Transaction[]> => {
-    if (!isUsingSupabase) return [];
+    if (!isUsingSupabase) return mockTransactions;
     try {
       const { data } = await supabase.from('transactions').select(`*, items:transaction_items (*)`).order('date', { ascending: false });
       return data ? data.map((t: any) => ({
         ...t,
         items: t.items ? t.items.map((i: any) => ({
-          id: i.product_id, name: i.product_name, qty: i.qty, selected_price: i.price, subtotal: i.subtotal,
+          id: i.product_id, 
+          name: i.product_name, 
+          qty: i.qty, 
+          selected_price: i.price, 
+          subtotal: i.subtotal,
+          cost_price: i.cost_price, // IMPORTANT: Mapped to ensure profit calculation works
           sku: '', category: '', stock: 0, price_general: 0, price_agen: 0, price_distributor: 0, discount: 0
         })) : []
       })) : [];
@@ -280,7 +293,35 @@ export const DataService = {
   },
 
   getReports: async (period: 'day' | 'month' | 'year'): Promise<SalesReport[]> => {
-    return []; 
+    const transactions = await DataService.getTransactions();
+    const groups: { [key: string]: SalesReport } = {};
+
+    transactions.forEach(t => {
+        // Group by Date (YYYY-MM-DD)
+        const dateKey = t.date.split('T')[0];
+        
+        if (!groups[dateKey]) {
+            groups[dateKey] = { date: dateKey, total_sales: 0, total_profit: 0, transaction_count: 0 };
+        }
+
+        const group = groups[dateKey];
+        group.total_sales += t.total_amount;
+        group.transaction_count += 1;
+
+        // Calculate Profit: (Selling Price - Cost Price) * Qty
+        let profit = 0;
+        if (t.items) {
+            t.items.forEach(item => {
+                const cost = item.cost_price || 0;
+                const price = item.selected_price || 0;
+                profit += (price - cost) * item.qty;
+            });
+        }
+        group.total_profit += profit;
+    });
+
+    // Return as array sorted by date descending
+    return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
   },
 
   createPurchase: async (purchase: Purchase): Promise<void> => {
