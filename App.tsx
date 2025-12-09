@@ -338,37 +338,44 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
     setSearch(''); 
   };
 
-  // --- NEW FUNCTION: Manual Qty Update (Improved UX) ---
+  // --- NEW FUNCTION: Manual Qty Update (Fixed & Robust) ---
   const updateCartQty = (id: string, val: string) => {
-     const product = products.find(p => p.id === id);
-     if (!product) return;
-
-     // Allow empty string to clear the field temporarily while typing
-     if (val === '') {
+     // Sanitasi: Hanya angka
+     const cleanVal = val.replace(/[^0-9]/g, '');
+     
+     // Izinkan string kosong sementara (saat user menghapus semua angka)
+     if (cleanVal === '') {
          setCart(prev => prev.map(item => item.id === id ? { ...item, qty: 0, subtotal: 0 } : item));
          return;
      }
 
-     let qty = parseInt(val);
-     // Prevent NaN or negative
-     if (isNaN(qty) || qty < 0) qty = 0;
-
-     // Enforce stock limit silently (better UX than alert)
-     if (qty > product.stock) {
-          qty = product.stock;
-     }
-
+     const qty = parseInt(cleanVal, 10);
+     
+     // Update state tanpa batasan stok dulu (agar user bebas mengetik angka berapapun)
+     // Validasi stok akan dilakukan saat onBlur atau Checkout
      setCart(prev => prev.map(item => item.id === id ? { ...item, qty, subtotal: qty * item.selected_price } : item));
   };
 
-  // Handle blur to reset empty/zero qty to 1
+  // Handle blur: Validasi stok saat user selesai mengetik / pindah kolom
   const handleQtyBlur = (id: string) => {
+     const product = products.find(p => p.id === id);
+     if (!product) return;
+
      setCart(prev => prev.map(item => {
-        // If left empty or 0, revert to 1
-        if (item.id === id && (item.qty <= 0)) {
-            return { ...item, qty: 1, subtotal: 1 * item.selected_price };
+        if (item.id !== id) return item;
+        
+        let newQty = item.qty;
+        
+        // 1. Jika 0 atau kosong, kembalikan ke 1
+        if (!newQty || newQty <= 0) newQty = 1;
+        
+        // 2. Jika melebihi stok, kembalikan ke stok maksimal dan beri info
+        if (newQty > product.stock) {
+             alert(`Stok tidak mencukupi. Maksimal: ${product.stock}`);
+             newQty = product.stock;
         }
-        return item;
+
+        return { ...item, qty: newQty, subtotal: newQty * item.selected_price };
      }));
   };
 
@@ -393,11 +400,20 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
   const handleCheckout = async () => {
     if (processing) return;
 
-    // Filter out items with 0 qty just in case
+    // Filter valid items
     const validItems = cart.filter(i => i.qty > 0);
     if (validItems.length === 0) {
         alert("Keranjang belanja kosong atau jumlah item tidak valid.");
         return;
+    }
+    
+    // Final Validasi Stok
+    for (const item of validItems) {
+        const prod = products.find(p => p.id === item.id);
+        if (prod && item.qty > prod.stock) {
+            alert(`Stok produk "${item.name}" tidak mencukupi! Tersedia: ${prod.stock}`);
+            return;
+        }
     }
 
     setPaymentError('');
@@ -553,13 +569,13 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
                 <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm border border-slate-100">
                   <div className="flex-1">
                     <div className="font-medium text-sm text-slate-800">{item.name}</div>
-                    {/* MODIFIED: Input for Quantity with Better UX */}
+                    {/* MODIFIED: Input for Quantity with Better UX (Text Type + Numeric Mode) */}
                     <div className="flex items-center mt-2 gap-2">
                          <input 
-                            type="number" 
-                            min="1"
-                            max={products.find(p => p.id === item.id)?.stock}
-                            className="w-20 p-2 border border-indigo-200 rounded text-center text-sm font-bold text-indigo-700 bg-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                            type="text" 
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            className={`w-16 p-2 border rounded text-center text-sm font-bold outline-none focus:ring-2 ${item.qty > (products.find(p=>p.id===item.id)?.stock||0) ? 'border-red-500 text-red-600 focus:ring-red-200 bg-red-50' : 'border-slate-300 text-indigo-700 focus:ring-indigo-500'}`}
                             value={item.qty === 0 ? '' : item.qty}
                             onChange={(e) => updateCartQty(item.id, e.target.value)}
                             onBlur={() => handleQtyBlur(item.id)}
