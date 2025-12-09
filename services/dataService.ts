@@ -66,8 +66,9 @@ try {
 }
 
 // --- MOCK DATA FOR DEMO/OFFLINE MODE ---
-// In-memory storage for demo transactions so reports work in demo mode (reset on refresh)
+// In-memory storage for demo session (reset on refresh)
 let mockTransactions: Transaction[] = [];
+let mockPurchases: Purchase[] = []; // Store Purchases in memory for demo
 
 const MockAdmin: User = { id: '00000000-0000-0000-0000-000000000001', username: 'admin', full_name: 'Admin Demo', role: UserRole.ADMIN, pin_code: '1234' };
 const MockCashier: User = { id: '00000000-0000-0000-0000-000000000002', username: 'kasir', full_name: 'Kasir Demo', role: UserRole.CASHIER, pin_code: '1111' };
@@ -227,11 +228,10 @@ export const DataService = {
     else await supabase.from('store_settings').insert([settings]);
   },
 
-  // --- TRANSACTIONS ---
+  // --- TRANSACTIONS (SALES) ---
   createTransaction: async (transaction: Transaction): Promise<void> => {
     if (!isUsingSupabase) { 
         // Save to memory for demo session
-        console.log("Transaction saved (Mock):", transaction); 
         mockTransactions.unshift(transaction);
         return; 
     }
@@ -292,40 +292,13 @@ export const DataService = {
     } catch (e) { return []; }
   },
 
-  getReports: async (period: 'day' | 'month' | 'year'): Promise<SalesReport[]> => {
-    const transactions = await DataService.getTransactions();
-    const groups: { [key: string]: SalesReport } = {};
-
-    transactions.forEach(t => {
-        // Group by Date (YYYY-MM-DD)
-        const dateKey = t.date.split('T')[0];
-        
-        if (!groups[dateKey]) {
-            groups[dateKey] = { date: dateKey, total_sales: 0, total_profit: 0, transaction_count: 0 };
-        }
-
-        const group = groups[dateKey];
-        group.total_sales += t.total_amount;
-        group.transaction_count += 1;
-
-        // Calculate Profit: (Selling Price - Cost Price) * Qty
-        let profit = 0;
-        if (t.items) {
-            t.items.forEach(item => {
-                const cost = item.cost_price || 0;
-                const price = item.selected_price || 0;
-                profit += (price - cost) * item.qty;
-            });
-        }
-        group.total_profit += profit;
-    });
-
-    // Return as array sorted by date descending
-    return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
-  },
-
+  // --- PURCHASES (RESTOCK) ---
   createPurchase: async (purchase: Purchase): Promise<void> => {
-    if (!isUsingSupabase) { console.log("Purchase saved (Mock):", purchase); return; }
+    if (!isUsingSupabase) { 
+        // Save to memory for demo session
+        mockPurchases.unshift(purchase);
+        return; 
+    }
 
     const { data: pData, error: pError } = await supabase.from('purchases').insert([{
         invoice_number: purchase.invoice_number,
@@ -360,5 +333,40 @@ export const DataService = {
             }).eq('id', item.product_id);
         }
     }
-  }
+  },
+
+  getPurchases: async (): Promise<Purchase[]> => {
+    if (!isUsingSupabase) return mockPurchases;
+    try {
+      const { data } = await supabase.from('purchases').select(`*, items:purchase_items (*)`).order('date', { ascending: false });
+      return data ? data.map((p: any) => ({
+        ...p,
+        items: p.items ? p.items.map((i: any) => ({
+          product_id: i.product_id,
+          product_name: i.product_name,
+          qty: i.qty,
+          cost_price: i.cost_price,
+          subtotal: i.subtotal
+        })) : []
+      })) : [];
+    } catch (e) { return []; }
+  },
+
+  // Legacy simple report, kept for backward compatibility if needed, 
+  // but UI now calculates from raw transactions/purchases for more detail.
+  getReports: async (period: 'day' | 'month' | 'year'): Promise<SalesReport[]> => {
+    const transactions = await DataService.getTransactions();
+    const groups: { [key: string]: SalesReport } = {};
+    transactions.forEach(t => {
+        const dateKey = t.date.split('T')[0];
+        if (!groups[dateKey]) groups[dateKey] = { date: dateKey, total_sales: 0, total_profit: 0, transaction_count: 0 };
+        const group = groups[dateKey];
+        group.total_sales += t.total_amount;
+        group.transaction_count += 1;
+        let profit = 0;
+        if (t.items) t.items.forEach(item => { profit += ((item.selected_price || 0) - (item.cost_price || 0)) * item.qty; });
+        group.total_profit += profit;
+    });
+    return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
+  },
 };

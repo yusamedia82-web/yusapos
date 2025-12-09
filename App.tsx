@@ -1070,16 +1070,174 @@ const SupplierManager = () => {
     );
 };
 
-// --- REPORT PAGE ---
+// --- REPORT PAGE (COMPLETE) ---
 const ReportPage = () => {
-    const [data, setData] = useState<SalesReport[]>([]);
-    useEffect(() => { DataService.getReports('day').then(setData); }, []);
+    const [sales, setSales] = useState<Transaction[]>([]);
+    const [purchases, setPurchases] = useState<Purchase[]>([]);
+    const [activeTab, setActiveTab] = useState<'summary' | 'sales' | 'purchases' | 'cashiers'>('summary');
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const load = async () => {
+            const txs = await DataService.getTransactions();
+            const purs = await DataService.getPurchases(); // Now works
+            setSales(txs);
+            setPurchases(purs);
+            setLoading(false);
+        };
+        load();
+    }, []);
+
+    // Aggregations
+    const totalRevenue = sales.reduce((sum, t) => sum + t.total_amount, 0);
+    const totalPurchases = purchases.reduce((sum, p) => sum + p.total_amount, 0);
+    
+    // Calculate Profit
+    let totalGrossProfit = 0;
+    sales.forEach(t => {
+        if(t.items) {
+            t.items.forEach(item => {
+                const cost = item.cost_price || 0;
+                const price = item.selected_price || 0;
+                totalGrossProfit += (price - cost) * item.qty;
+            });
+        }
+    });
+
+    const cashierPerformance = sales.reduce((acc, curr) => {
+        const name = curr.cashier_name || 'Unknown';
+        if (!acc[name]) acc[name] = { name, count: 0, total: 0 };
+        acc[name].count += 1;
+        acc[name].total += curr.total_amount;
+        return acc;
+    }, {} as {[key:string]: {name:string, count:number, total:number}});
+
+    if (loading) return <div className="p-6">Loading Data...</div>;
+
     return (
         <div className="p-4 md:p-6">
-            <h2 className="text-2xl font-bold mb-4">Laporan</h2>
-            <div className="bg-white rounded shadow overflow-x-auto">
-                <table className="w-full text-sm text-left whitespace-nowrap"><thead className="bg-slate-50 uppercase"><tr><th className="p-4">Tanggal</th><th className="p-4 text-right">Omzet</th><th className="p-4 text-right">Laba</th></tr></thead><tbody>{data.map((r,i)=><tr key={i}><td className="p-4">{r.date}</td><td className="p-4 text-right">{formatRupiah(r.total_sales)}</td><td className="p-4 text-right">{formatRupiah(r.total_profit)}</td></tr>)}</tbody></table>
+            <h2 className="text-2xl font-bold mb-6">Pusat Laporan & Analisa</h2>
+            
+            {/* Tabs */}
+            <div className="flex gap-2 overflow-x-auto mb-6 pb-2">
+                <button onClick={() => setActiveTab('summary')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${activeTab==='summary' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50 border'}`}>Ringkasan</button>
+                <button onClick={() => setActiveTab('sales')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${activeTab==='sales' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50 border'}`}>Riwayat Penjualan</button>
+                <button onClick={() => setActiveTab('purchases')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${activeTab==='purchases' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50 border'}`}>Riwayat Pembelian</button>
+                <button onClick={() => setActiveTab('cashiers')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${activeTab==='cashiers' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50 border'}`}>Kinerja Kasir</button>
             </div>
+
+            {/* Tab: Summary */}
+            {activeTab === 'summary' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in zoom-in duration-300">
+                    <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-indigo-500">
+                        <div className="text-slate-500 text-sm font-medium mb-1">Total Omzet (Penjualan)</div>
+                        <div className="text-2xl font-bold text-indigo-700">{formatRupiah(totalRevenue)}</div>
+                        <div className="text-xs text-slate-400 mt-2">{sales.length} Transaksi</div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-green-500">
+                        <div className="text-slate-500 text-sm font-medium mb-1">Total Laba Kotor (Profit)</div>
+                        <div className="text-2xl font-bold text-green-700">{formatRupiah(totalGrossProfit)}</div>
+                        <div className="text-xs text-slate-400 mt-2">Margin: {totalRevenue ? ((totalGrossProfit/totalRevenue)*100).toFixed(1) : 0}%</div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-500">
+                        <div className="text-slate-500 text-sm font-medium mb-1">Total Belanja Stok (Keluar)</div>
+                        <div className="text-2xl font-bold text-orange-700">{formatRupiah(totalPurchases)}</div>
+                        <div className="text-xs text-slate-400 mt-2">{purchases.length} Invoice Pembelian</div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-slate-500">
+                        <div className="text-slate-500 text-sm font-medium mb-1">Net Cashflow (Masuk - Keluar)</div>
+                        <div className={`text-2xl font-bold ${totalRevenue - totalPurchases >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{formatRupiah(totalRevenue - totalPurchases)}</div>
+                        <div className="text-xs text-slate-400 mt-2">Omzet - Belanja Stok</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Tab: Sales History */}
+            {activeTab === 'sales' && (
+                <div className="bg-white rounded-lg shadow overflow-hidden animate-in fade-in duration-300">
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs">
+                                <tr>
+                                    <th className="p-4">Tanggal / Waktu</th>
+                                    <th className="p-4">No. Invoice</th>
+                                    <th className="p-4">Kasir</th>
+                                    <th className="p-4">Pelanggan</th>
+                                    <th className="p-4">Metode</th>
+                                    <th className="p-4 text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {sales.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-slate-400">Belum ada data penjualan</td></tr>}
+                                {sales.map(s => (
+                                    <tr key={s.id} className="hover:bg-slate-50">
+                                        <td className="p-4">{formatDate(s.date)}</td>
+                                        <td className="p-4 font-mono">{s.invoice_number}</td>
+                                        <td className="p-4">{s.cashier_name}</td>
+                                        <td className="p-4">{s.customer_name}</td>
+                                        <td className="p-4 capitalize">{s.payment_method === 'debt' ? <span className="text-red-600 bg-red-50 px-2 py-0.5 rounded text-xs font-bold">HUTANG</span> : 'Lunas'}</td>
+                                        <td className="p-4 text-right font-bold">{formatRupiah(s.total_amount)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Tab: Purchases History */}
+            {activeTab === 'purchases' && (
+                 <div className="bg-white rounded-lg shadow overflow-hidden animate-in fade-in duration-300">
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs">
+                                <tr>
+                                    <th className="p-4">Tanggal</th>
+                                    <th className="p-4">Supplier</th>
+                                    <th className="p-4">No. Nota Supplier</th>
+                                    <th className="p-4 text-right">Total Belanja</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {purchases.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-400">Belum ada data pembelian stok</td></tr>}
+                                {purchases.map(p => (
+                                    <tr key={p.id} className="hover:bg-slate-50">
+                                        <td className="p-4">{formatDate(p.date)}</td>
+                                        <td className="p-4 font-bold text-slate-700">{p.supplier_name}</td>
+                                        <td className="p-4 font-mono">{p.invoice_number}</td>
+                                        <td className="p-4 text-right font-bold text-orange-700">{formatRupiah(p.total_amount)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Tab: Cashiers */}
+            {activeTab === 'cashiers' && (
+                <div className="bg-white rounded-lg shadow p-6 animate-in fade-in duration-300">
+                    <h3 className="font-bold text-lg mb-4">Performa Kasir</h3>
+                    <div className="space-y-4">
+                        {Object.values(cashierPerformance).map((c: any) => (
+                            <div key={c.name} className="flex items-center p-4 border rounded-lg hover:shadow-sm transition">
+                                <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold mr-4">
+                                    {c.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="font-bold text-lg">{c.name}</div>
+                                    <div className="text-sm text-slate-500">{c.count} Transaksi Berhasil</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="font-bold text-xl text-indigo-700">{formatRupiah(c.total)}</div>
+                                    <div className="text-xs text-slate-400">Total Omzet</div>
+                                </div>
+                            </div>
+                        ))}
+                         {Object.keys(cashierPerformance).length === 0 && <div className="text-center text-slate-400">Belum ada data kinerja kasir.</div>}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
