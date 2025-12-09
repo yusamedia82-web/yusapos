@@ -338,6 +338,21 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
     setSearch(''); 
   };
 
+  const updateCartQty = (id: string, val: string) => {
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+
+    let qty = parseInt(val);
+    if (isNaN(qty) || qty < 1) qty = 1;
+
+    if (qty > product.stock) {
+         alert(`Maksimal stok: ${product.stock}`);
+         qty = product.stock;
+    }
+
+    setCart(prev => prev.map(item => item.id === id ? { ...item, qty, subtotal: qty * item.selected_price } : item));
+ };
+
   const removeFromCart = (id: string) => {
     setCart(prev => prev.filter(i => i.id !== id));
   };
@@ -509,11 +524,19 @@ const POS = ({ user, settings }: { user: User, settings: StoreSettings }) => {
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
               {cart.length === 0 && <div className="text-center text-slate-400 mt-10">Keranjang Kosong</div>}
               {cart.map(item => (
-                <div key={item.id} className="flex justify-between items-start bg-white p-3 rounded shadow-sm border border-slate-100">
+                <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm border border-slate-100">
                   <div className="flex-1">
                     <div className="font-medium text-sm text-slate-800">{item.name}</div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {item.qty} x {formatRupiah(item.selected_price)}
+                    <div className="flex items-center mt-2 gap-2">
+                        <input 
+                        type="number" 
+                        min="1"
+                        className="w-16 p-1 border rounded text-center text-sm font-bold text-indigo-700 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        value={item.qty}
+                        onChange={(e) => updateCartQty(item.id, e.target.value)}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                        />
+                        <span className="text-xs text-slate-500">x {formatRupiah(item.selected_price)}</span>
                     </div>
                   </div>
                   <div className="text-right pl-2">
